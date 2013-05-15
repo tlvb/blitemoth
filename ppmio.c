@@ -73,7 +73,7 @@ ppm_t *ppm_read(ppm_t *recycle, char *fn, int *status) { /*{{{*/
 		recycle = calloc(1, sizeof(ppm_t));
 		if (recycle == NULL) {
 			fclose(f);
-			*status = PPM_ALLOCFAIL;
+			*status = PPM_BADALLOC;
 			return recycle;
 		}
 	}
@@ -83,7 +83,7 @@ ppm_t *ppm_read(ppm_t *recycle, char *fn, int *status) { /*{{{*/
 			recycle->data = malloc(count*sizeof(rgb888_t));
 			if (recycle->data == NULL) {
 				fclose(f);
-				*status = PPM_ALLOCFAIL;
+				*status = PPM_BADALLOC;
 				return recycle;
 			}
 		}
@@ -92,7 +92,7 @@ ppm_t *ppm_read(ppm_t *recycle, char *fn, int *status) { /*{{{*/
 		recycle->data = malloc(count*sizeof(rgb888_t));
 		if (recycle->data == NULL) {
 			fclose(f);
-			*status = PPM_ALLOCFAIL;
+			*status = PPM_BADALLOC;
 			return recycle;
 		}
 	}
@@ -108,7 +108,17 @@ ppm_t *ppm_read(ppm_t *recycle, char *fn, int *status) { /*{{{*/
 	return recycle;
 } /*}}}*/
 int ppm_write(char *fn, ppm_t *img) { /*{{{*/
-	return 0;
+	FILE *f = fopen(fn, "w");
+	size_t count = img->width * img->height;
+	if (f == NULL)
+		return PPM_FILEERROR;
+	fprintf(f, "P6\n%d %d\n255\n", img->width, img->height);
+	if (count != fwrite(img->data, sizeof(rgb888_t), count, f)) {
+		fclose(f);
+		return PPM_BADFILE;
+	}
+	fclose(f);
+	return PPM_OK;
 } /*}}}*/
 ppm_t *ppm_free(ppm_t *prisoner) { /*{{{*/
 	if (prisoner != NULL) {

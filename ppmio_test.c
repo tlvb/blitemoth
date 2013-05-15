@@ -46,7 +46,7 @@ int test1() { /*{{{*/
 			case PPM_BADFILE:
 				fprintf(stderr, "unsupported file format or broken file\n");
 				break;
-			case PPM_ALLOCFAIL:
+			case PPM_BADALLOC:
 				fprintf(stderr, "could not allocate memory\n");
 				break;
 		}

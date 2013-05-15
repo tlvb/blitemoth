@@ -7,7 +7,7 @@
 #define PPM_OK 0
 #define PPM_FILEERROR 1
 #define PPM_BADFILE 2
-#define PPM_ALLOCFAIL 3
+#define PPM_BADALLOC 3
 
 #define ppm_data(i,x,y,j) (i->data[i->width*y+x].c[j])
 
