@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "blitemoth_engine.h"
+
 #define CLI_OK 0
 #define CLI_BADALLOC 1
 #define CLI_BADPARM 2
@@ -18,6 +20,10 @@ typedef struct {
 		unsigned int begin;
 		unsigned int end;
 	} file;
+	struct {
+		unsigned int count;
+		action_t **action;
+	} work;
 } setup_t;
 
 setup_t *interpret_argv(int argc, char * const argv[], int *status);
