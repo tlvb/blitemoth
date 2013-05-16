@@ -12,7 +12,8 @@
 #define ENGA_COPY 0
 #define ENGA_VALUE 1
 #define ENGA_PAL 2
-#define ENGA_IGNORE 3
+#define ENGA_CLIP 3
+#define ENGA_IGNORE 4
 
 #define ENG_MAXPALETTE 12
 
@@ -32,15 +33,15 @@ typedef struct {
 	uint8_t o[ENG_MAXPALETTE];
 } order_t;
 
-typedef union {
+typedef struct {
+	unsigned int type;
 	ranged_val_t value;
-	uint8_t palmap;
-} edgemap_data_t;
+} edgemap_mapopt_t;
 
 typedef struct {
-	uint8_t priority;
-	uint8_t type;
-	edgemap_data_t data[2];
+	unsigned int priority;
+	edgemap_mapopt_t matched;
+	edgemap_mapopt_t unmatched;
 } edgemap_t;
 
 
@@ -49,12 +50,19 @@ typedef struct {
 	ranged_val_t ubound;
 	palette_t palette;
 	order_t priority;
+	bool splitab;
 	edgemap_t below;
 	edgemap_t above;
 } action_t;
 
-int parse_ranged_val(ranged_val_t *target, char *text, int *accum);
-int parse_order(order_t *target, char *text, int *accum, int n);
+void showerr(char *text, unsigned int accum);
+int match_word(char *text, char *words, unsigned int *accum);
+bool match_int(char *text, int *target, unsigned int *accum);
+bool match_uint(char *text, unsigned int *target, unsigned int *accum);
+bool parse_ranged_val(ranged_val_t *target, char *text, unsigned int *accum);
+bool parse_order(order_t *target, char *text, unsigned int *accum, int n);
+bool parse_edgemap(edgemap_t *target, char *text, unsigned int *accum);
+bool parse_edgemap_mapopt(edgemap_mapopt_t *target, char *text, unsigned int *accum);
 action_t *parse_action(char *text, int *status);
 action_t *free_action(action_t *prisoner);
 
