@@ -1,11 +1,12 @@
-#include "blitemoth_engine.h"
+#include "blitemoth_parser.h"
+#include "blitemoth_info.h"
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#include <unistd.h>
 
-#define badreturnval(...) erpr("called function returned an error: " __VA_ARGS__)
 #define badalloc() erpr("memory allocation failure\n")
-#define erpr(...) fprintf(stderr, "ENGINE :: " __VA_ARGS__)
+#define erpr(...) fprintf(stderr, "parser error :: " __VA_ARGS__)
 
 void showerr(char *text, unsigned int accum) { /*{{{*/
 	erpr("\"%s\"\n", text);
@@ -43,7 +44,7 @@ int match_word(char *text, char *words, unsigned int *accum) { /*{{{*/
 	showerr(text, *accum);
 	return -1;
 } /*}}}*/
-bool match_int(char *text, int *target, unsigned int *accum) { /*{{{*/
+bool parse_int(char *text, int *target, unsigned int *accum) { /*{{{*/
 	if (strlen(text) > *accum) {
 		int delta = 0;
 		if (sscanf(text+*accum, "%d%n", target, &delta) != 0) {
@@ -58,7 +59,7 @@ bool match_int(char *text, int *target, unsigned int *accum) { /*{{{*/
 
 	return false;
 } /*}}}*/
-bool match_uint(char *text, unsigned int *target, unsigned int *accum) { /*{{{*/
+bool parse_uint(char *text, unsigned int *target, unsigned int *accum) { /*{{{*/
 	if (strlen(text) > *accum) {
 		int delta = 0;
 		if (sscanf(text+*accum, "%u%n", target, &delta) != 0) {
@@ -75,7 +76,7 @@ bool match_uint(char *text, unsigned int *target, unsigned int *accum) { /*{{{*/
 } /*}}}*/
 bool parse_ranged_val(ranged_val_t *target, char *text, unsigned int *accum) { /*{{{*/
 	int n = 0;
-	if (!match_int(text, &target->value, accum)) {
+	if (!parse_int(text, &target->value, accum)) {
 		return false;
 	}
 	if ((strlen(text) > *accum) && (text[*accum] == ':')) {
@@ -88,7 +89,7 @@ bool parse_ranged_val(ranged_val_t *target, char *text, unsigned int *accum) { /
 		}
 		target->start = target->value;
 		target->is_ranged = true;
-		if (!match_int(text, &target->stop, accum)) {
+		if (!parse_int(text, &target->stop, accum)) {
 			return false;
 		}
 	}
@@ -132,7 +133,7 @@ bool parse_edgemap(edgemap_t *target, char *text, unsigned int *accum) { /*{{{*/
 		*accum -= 3; // hack in order to rescan the word in parse_edgemap_mapopt
 	}
 	else {
-		if (!match_uint(text, &target->priority, accum)) {
+		if (!parse_uint(text, &target->priority, accum)) {
 			return false;
 		}
 	}
@@ -156,13 +157,13 @@ bool parse_edgemap(edgemap_t *target, char *text, unsigned int *accum) { /*{{{*/
 } /*}}}*/
 bool parse_edgemap_mapopt(edgemap_mapopt_t *target, char *text, unsigned int *accum) { /*{{{*/
 	char tmp[8];
-	unsigned int modevs[5] = {ENGA_COPY, ENGA_VALUE, ENGA_PAL, ENGA_CLIP, ENGA_IGNORE};
+	unsigned int modevs[5] = {COPY, VALUE, PAL, CLIP, IGNORE};
 	int typei = match_word(text, "cpy,val,pal,clp,ign", accum);
 	if (typei < 0) {
 		return false;
 	}
 	target->type = modevs[typei];
-	if (target->type == ENGA_VALUE || target->type == ENGA_PAL) {
+	if (target->type == VALUE || target->type == PAL) {
 		if (!parse_ranged_val(&target->value, text, accum)) {
 			return false;
 		}
@@ -173,7 +174,7 @@ action_t *parse_action(char *text, int *status) { /*{{{*/
 	action_t *a = malloc(sizeof(action_t));
 	if (a == NULL) { /*{{{*/
 		badalloc();
-		*status = ENG_BADALLOC;
+		*status = PARSER_BADALLOC;
 		return NULL;
 	} /*}}}*/
 
@@ -182,12 +183,12 @@ action_t *parse_action(char *text, int *status) { /*{{{*/
 	char swtmp[10];
 	int n;
 
-	*status = ENG_BADFORM;
+	*status = PARSER_BADFORM;
 	if (!parse_ranged_val(&a->lbound, text, &accum))	{ return a; }
 	if (match_word(text, "to", &accum) < 0)				{ return a; }
 	if (!parse_ranged_val(&a->ubound, text, &accum))	{ return a; }
 	if (match_word(text, "as", &accum) < 0)				{ return a; }
-	if (!match_uint(text, &a->palette.n, &accum))		{ return a; }
+	if (!parse_uint(text, &a->palette.n, &accum))		{ return a; }
 	if (match_word(text, "prio", &accum) < 0)			{ return a; }
 
 	if (!parse_order(&a->priority, text, &accum, a->palette.n)) {
@@ -209,7 +210,7 @@ action_t *parse_action(char *text, int *status) { /*{{{*/
 		if (match_word(text, "elseabove", &accum) < 0) 	{ return a; }
 		if (!parse_edgemap(&a->above, text, &accum))   	{ return a; }
 	}
-	*status = ENG_OK;
+	*status = PARSER_OK;
 	return a;
 } /*}}}*/
 action_t *free_action(action_t *prisoner) { /*{{{*/
@@ -217,6 +218,144 @@ action_t *free_action(action_t *prisoner) { /*{{{*/
 		free(prisoner);
 	}
 	return NULL;
+} /*}}}*/
+
+setup_t *interpret_argv(int argc, char * const argv[], int *status) { /*{{{*/
+	*status = PARSER_OK;
+	setup_t *setup = calloc(1, sizeof(setup_t));
+	if (setup == NULL) {
+		badalloc();
+		*status = PARSER_BADALLOC;
+		return setup;
+	}
+	const char *optstr = "Vvi:o:m:c:";
+	opterr = 0;
+	int opt = getopt(argc, argv, optstr);
+	int actionstatus = PARSER_OK;
+
+	while (opt > -1) {
+		action_t *action = NULL;
+		action_t **tmp = NULL;
+		switch (opt) {
+			case 'V': /* version/info {{{ */
+				fprintf(stderr, BLITEMOTH_INFO_STRING);
+				break; /* }}} */
+			case 'v': /* verbose {{{ */
+				setup->verbose = true;
+				break; /* }}} */
+			case 'i': /* input file {{{ */
+				setup->file.input = calloc(strlen(optarg)+1, sizeof(char));
+				if (setup->file.input == NULL) { /*{{{*/
+					badalloc();
+					*status = PARSER_BADALLOC;
+					return setup;
+				} /*}}}*/
+				strcpy(setup->file.input, optarg);
+				break; /* }}} */
+			case 'o': /* output file {{{ */
+				setup->file.output = calloc(strlen(optarg)+1, sizeof(char));
+				if (setup->file.output == NULL) { /*{{{*/
+					badalloc();
+					*status = PARSER_BADALLOC;
+					return setup;
+				} /*}}}*/
+				strcpy(setup->file.output, optarg);
+				break; /* }}} */
+			case 'm': /* multiple file range {{{ */
+				setup->file.range = true;
+				int n = sscanf(optarg, "%u %u",
+						&(setup->file.begin),
+						&(setup->file.end));
+				switch (n) {
+					case 0:
+						erpr("argument \"-m\" needs one or two positive numbers\n");
+						break;
+					case 1:
+						setup->file.end = setup->file.begin;
+						setup->file.begin = 0;
+						break;
+				}
+				break; /* }}} */
+			case 'c': /* all-channel work order {{{ */
+				action = parse_action(optarg, &actionstatus);
+				if (actionstatus != PARSER_OK) { /*{{{*/
+					free_action(action);
+					switch (actionstatus) {
+						case PARSER_BADFORM:
+							erpr("argument to parameter \"-c\" has bad syntax\n");
+							*status = PARSER_BADFORM;
+							return setup;
+							break;
+						case PARSER_BADALLOC:
+							erpr("failed to allocate small amounts of memory, probably bad\n");
+							*status = PARSER_BADALLOC;
+							return setup;
+							break;
+					}
+				} /*}}}*/
+				setup->work.count += 1;
+				tmp = realloc(setup->work.action, setup->work.count*sizeof(action_t*));
+				if (tmp == NULL) { /*{{{*/
+					badalloc();
+					free_action(action);
+					setup->work.count -= 1;
+					*status = PARSER_BADALLOC;
+					return setup;
+				} /*}}}*/
+				setup->work.action = tmp;
+				setup->work.action[setup->work.count-1] = action;
+				break; /* }}} */
+			case '?': /* now I am confused! {{{ */
+				erpr("Missing argument to parameter \"-%c\" or parameter \"%c\" not recognized.\n", optopt, optopt);
+				*status = PARSER_CONFUSED;
+				return setup;
+				break; /* }}} */
+		}
+		opt = getopt(argc, argv, optstr);
+	}
+
+	if (setup->verbose) {
+		if (setup->file.input != NULL) { /*{{{*/
+			if (setup->file.range) {
+				fprintf(stderr, "Input: files '");
+				fprintf(stderr, setup->file.input, setup->file.begin);
+				fprintf(stderr, "' to '");
+				fprintf(stderr, setup->file.input, setup->file.end);
+				fprintf(stderr, "' inclusive.\n");
+			}
+			else {
+				fprintf(stderr, "Input: '%s'\n", setup->file.input);
+			}
+		} /*}}}*/
+		if (setup->file.output != NULL) { /*{{{*/
+			if (setup->file.range) {
+				fprintf(stderr, "Output: files '");
+				fprintf(stderr, setup->file.output, setup->file.begin);
+				fprintf(stderr, "' to '");
+				fprintf(stderr, setup->file.output, setup->file.end);
+				fprintf(stderr, "' inclusive.\n");
+			}
+			else {
+				fprintf(stderr, "Output: '%s'\n", setup->file.output);
+			}
+		} /*}}}*/
+	}
+	return setup;
+} /*}}}*/
+setup_t *free_setup(setup_t *prisoner) { /*{{{*/
+	if (prisoner != NULL) {
+		if (prisoner->file.input != NULL)
+			free(prisoner->file.input);
+		if (prisoner->file.output != NULL)
+			free(prisoner->file.output);
+		if (prisoner->work.action != NULL) {
+			for (unsigned int i=0; i<prisoner->work.count; ++i) {
+				free_action(prisoner->work.action[i]);
+			}
+			free(prisoner->work.action);
+		}
+		free(prisoner);
+	}
 } /*}}}*/
 
 #undef badreturnval

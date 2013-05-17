@@ -1,15 +1,12 @@
 CC=gcc
 CFLAGS=--std=gnu99 -Wextra -pedantic-errors -Wformat=2 -g
 
-blitemoth: blitemoth_main.c blitemoth_cli.o blitemoth_engine.o ppmio.o
+blitemoth: blitemoth_main.c blitemoth_parser.o ppmio.o
 	$(CC) $(CFLAGS) -o blitemoth \
-		blitemoth_main.c blitemoth_cli.o blitemoth_engine.o ppmio.o
+		blitemoth_main.c blitemoth_parser.o ppmio.o
 
-blitemoth_cli.o: blitemoth_cli.c blitemoth_cli.h blitemoth_info.h blitemoth_engine.h
-	$(CC) $(CFLAGS) -Wno-format-nonliteral -c blitemoth_cli.c
-
-blitemoth_engine.o: blitemoth_engine.c blitemoth_engine.h
-	$(CC) $(CFLAGS) -c blitemoth_engine.c
+blitemoth_parser.o: blitemoth_parser.c blitemoth_parser.h blitemoth_info.h
+	$(CC) $(CFLAGS) -Wno-format-nonliteral -c blitemoth_parser.c
 
 # TESTING STUFF
 #
@@ -28,8 +25,8 @@ ppmio.o: ppmio.c ppmio.h
 
 # CLEANING STUFF
 #
-.PHONY: cleanall cleanobj cleanbin
-cleanall: cleanobj cleanbin
+.PHONY: clean cleanobj cleanbin
+clean: cleanobj cleanbin
 
 cleanobj:
 	-rm *.o
