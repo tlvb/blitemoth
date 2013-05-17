@@ -13,7 +13,7 @@ void showerr(char *text, unsigned int accum) { /*{{{*/
 	int a = accum;
 	while (a-- > 0)
 		fputc('.', stderr);
-	fprintf(stderr,"\x1b[1;31m^\x1b[0mAFTER HERE (character %d)\n", accum);
+	fprintf(stderr,"\x1b[1;31m^\x1b[0mHERE (character %d)\n", accum);
 } /*}}}*/
 int match_word(char *text, char *words, unsigned int *accum) { /*{{{*/
 	if (strlen(text) > *accum) {;
@@ -47,8 +47,10 @@ bool match_int(char *text, int *target, unsigned int *accum) { /*{{{*/
 	if (strlen(text) > *accum) {
 		int delta = 0;
 		if (sscanf(text+*accum, "%d%n", target, &delta) != 0) {
-			*accum += delta;
-			return true;
+			if (delta > 0) {
+				*accum += delta;
+				return true;
+			}
 		}
 	}
 	erpr("Expected an integer\n");
@@ -60,8 +62,10 @@ bool match_uint(char *text, unsigned int *target, unsigned int *accum) { /*{{{*/
 	if (strlen(text) > *accum) {
 		int delta = 0;
 		if (sscanf(text+*accum, "%u%n", target, &delta) != 0) {
-			*accum += delta;
-			return true;
+			if (delta > 0) {
+				*accum += delta;
+				return true;
+			}
 		}
 	}
 	erpr("Expected a positive integer\n");
@@ -123,14 +127,14 @@ bool parse_edgemap(edgemap_t *target, char *text, unsigned int *accum) { /*{{{*/
 	if (wi < 0) {
 		return false;
 	}
-	else if (wi == 0) {
+	else if (wi > 0) {
 		target->priority = UINT_MAX;
+		*accum -= 3; // hack in order to rescan the word in parse_edgemap_mapopt
+	}
+	else {
 		if (!match_uint(text, &target->priority, accum)) {
 			return false;
 		}
-	}
-	else {
-		*accum -= 3; // hack in order to rescan the word in parse_edgemap_mapopt
 	}
 	if (target->priority == UINT_MAX) { // no priority set = lowest priority (highest value)
 		if (!parse_edgemap_mapopt(&target->unmatched, text, accum)) {
